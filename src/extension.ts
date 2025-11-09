@@ -1,26 +1,90 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import { Logger } from './utils/logger';
+import { checkPrerequisites, showPrerequisiteError } from './utils/prerequisites';
+import { AwsProfileStatusBar } from './features/statusBar';
+import { fetchEnvFromKube } from './features/kubeCommands';
+import { disposeKubectlExecutor } from './utils/terminal';
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
-export function activate(context: vscode.ExtensionContext) {
+const logger = new Logger();
+let statusBar: AwsProfileStatusBar | undefined;
 
-  // Use the console to output diagnostic information (console.log) and errors (console.error)
-  // This line of code will only be executed once when your extension is activated
-  console.log('Congratulations, your extension "vscode-extension-boilerplate" is now active!');
+export async function activate(context: vscode.ExtensionContext) {
+  logger.info('AWS & Kubernetes Utilities extension is activating...');
 
-  // The command has been defined in the package.json file
-  // Now provide the implementation of the command with registerCommand
-  // The commandId parameter must match the command field in package.json
-  const disposable = vscode.commands.registerCommand('vscode-extension-boilerplate.helloWorld', () => {
-    // The code you place here will be executed every time your command is executed
-    // Display a message box to the user
-    vscode.window.showInformationMessage('Hello World from vscode-extension-boilerplate!');
+  const prerequisites = await checkPrerequisites();
+
+  if (!prerequisites.allPresent) {
+    logger.info('Prerequisites check failed, showing error to user');
+    await showPrerequisiteError(prerequisites);
+    
+    const openWalkthroughCmd = vscode.commands.registerCommand(
+      'aws-kube-utils.openSetupWalkthrough',
+      async () => {
+        await vscode.commands.executeCommand(
+          'workbench.action.openWalkthrough',
+          'microservitors.vscode-extension-boilerplate#awsKubeSetup'
+        );
+      }
+    );
+    context.subscriptions.push(openWalkthroughCmd);
+    
+    logger.info('Extension activation completed with errors (prerequisites not met)');
+    return;
+  }
+
+  logger.info('All prerequisites satisfied, initializing extension features...');
+
+  statusBar = new AwsProfileStatusBar(context);
+  context.subscriptions.push(statusBar);
+  logger.info('Status bar initialized');
+
+  const fetchEnvCmd = vscode.commands.registerCommand(
+    'aws-kube-utils.fetchEnvFromKube',
+    async (uri?: vscode.Uri) => {
+      await fetchEnvFromKube(uri);
+    }
+  );
+  context.subscriptions.push(fetchEnvCmd);
+  logger.info('Fetch Environment from Kube command registered');
+
+  const switchProfileCmd = vscode.commands.registerCommand(
+    'aws-kube-utils.switchAwsProfile',
+    async () => {
+      if (statusBar) {
+        await statusBar.switchProfile();
+      }
+    }
+  );
+  context.subscriptions.push(switchProfileCmd);
+  logger.info('Switch AWS Profile command registered');
+
+  const openWalkthroughCmd = vscode.commands.registerCommand(
+    'aws-kube-utils.openSetupWalkthrough',
+    async () => {
+      await vscode.commands.executeCommand(
+        'workbench.action.openWalkthrough',
+        'microservitors.vscode-extension-boilerplate#awsKubeSetup'
+      );
+    }
+  );
+  context.subscriptions.push(openWalkthroughCmd);
+  logger.info('Open Setup Walkthrough command registered');
+
+  vscode.workspace.onDidChangeConfiguration((e) => {
+    if (e.affectsConfiguration('awsKubeUtils')) {
+      logger.info('Configuration changed, refreshing status bar');
+      if (statusBar) {
+        statusBar.refresh();
+      }
+    }
   });
 
-  context.subscriptions.push(disposable);
+  logger.info('AWS & Kubernetes Utilities extension activated successfully');
+  vscode.window.showInformationMessage('AWS & Kubernetes Utilities extension is ready!');
 }
 
-// This method is called when your extension is deactivated
-export function deactivate() {}
+export function deactivate() {
+  logger.info('AWS & Kubernetes Utilities extension is deactivating...');
+  disposeKubectlExecutor();
+  logger.info('Extension deactivated');
+}
