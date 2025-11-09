@@ -6,6 +6,9 @@ import { writeFile } from '../utils/workspace';
 
 const logger = new Logger();
 
+export const environments = ['test', 'integration', 'preprod', 'prod'] as const;
+export type Environment = typeof environments[number];
+
 export const KUBE_NAMESPACES = {
   "yol-backend": [
     "yol-address-lookup",
