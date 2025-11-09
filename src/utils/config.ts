@@ -39,19 +39,7 @@ export class Config {
     this.refresh();
   }
 
-  getAwsCaBundlePath(): string {
-    return this.read().awsCaBundlePath;
-  }
-
-  getStatusBarRefreshInterval(): number {
-    return this.read().statusBarRefreshInterval;
-  }
-
-  async setAwsCaBundlePath(path: string): Promise<void> {
-    await this.write('awsCaBundlePath', path);
-  }
-
-  async setStatusBarRefreshInterval(interval: number): Promise<void> {
-    await this.write('statusBarRefreshInterval', interval);
+  value<K extends keyof ExtensionConfig>(name: K): ExtensionConfig[K] {
+    return this.read()[name];
   }
 }
