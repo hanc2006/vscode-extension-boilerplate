@@ -1,7 +1,10 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { getKubectlExecutor } from '../utils/terminal';
-import { log, logError } from '../utils/logger';
+import { Logger } from '../utils/logger';
+import { writeFile } from '../utils/workspace';
+
+const logger = new Logger();
 
 export const KUBE_NAMESPACES = {
   "yol-backend": [
@@ -121,7 +124,7 @@ export async function writeEnvLocalFromK8sSecret(
 
   const PREFIX = serviceName.toUpperCase().replace(/-/g, "_") + "_";
 
-  log(`Fetching secret '${secretName}' from namespace '${namespace}'`);
+  logger.info(`Fetching secret '${secretName}' from namespace '${namespace}'`);
 
   // 1) Fetch Secret JSON
   const sec = await executor.executeCommandWithMarkers(
@@ -129,7 +132,7 @@ export async function writeEnvLocalFromK8sSecret(
   );
   if (sec.failed) {
     const errorMsg = `Failed to fetch secret '${secretName}' from namespace '${namespace}'.`;
-    logError(errorMsg);
+    logger.error(errorMsg);
     throw new Error(errorMsg);
   }
   const secJson = JSON.parse(sec.stdout || "{}");
@@ -152,7 +155,7 @@ export async function writeEnvLocalFromK8sSecret(
   // 2) Append env block from ConfigMap <secretBaseName>-cm-app-config
   const cmName = `${serviceName}-cm-app-config`;
 
-  log(`Fetching configmap '${cmName}' from namespace '${namespace}'`);
+  logger.info(`Fetching configmap '${cmName}' from namespace '${namespace}'`);
   const cm = await executor.executeCommandWithMarkers(
     `kubectl get configmap ${cmName} -n ${namespace} -o json`
   );
@@ -190,7 +193,7 @@ export async function writeEnvLocalFromK8sSecret(
   // 3) Append global secret ns-global-secrets (same namespace) with PREFIX
   const globalSecretName = "ns-global-secrets";
 
-  log(`Fetching global secret '${globalSecretName}' from namespace '${namespace}'`);
+  logger.info(`Fetching global secret '${globalSecretName}' from namespace '${namespace}'`);
   const gs = await executor.executeCommandWithMarkers(
     `kubectl get secret ${globalSecretName} -n ${namespace} -o json`
   );
@@ -234,10 +237,10 @@ export async function writeEnvLocalFromK8sSecret(
     await vscode.workspace.fs.createDirectory(dirUri);
     
     await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf8'));
-    log(`Successfully wrote environment file to: ${envOutPath}`);
+    logger.info(`Successfully wrote environment file to: ${envOutPath}`);
   } catch (error: any) {
     const errorMsg = `Failed to write environment file to ${envOutPath}: ${error.message}`;
-    logError(errorMsg, error);
+    logger.error(errorMsg, error);
     throw new Error(errorMsg);
   }
 

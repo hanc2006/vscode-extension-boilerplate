@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
-import { log, logError } from './logger';
+import { Logger } from './logger';
+
+const logger = new Logger();
 
 export interface TerminalExecResult {
   stdout: string;
@@ -29,7 +31,7 @@ export class TerminalExecutor {
       const terminal = this.getOrCreateTerminal();
       this.outputBuffer = '';
       
-      log(`Executing terminal command: ${command}`);
+      logger.info(`Executing terminal command: ${command}`);
 
       const timeout = options?.timeout || 30000;
       let timeoutHandle: NodeJS.Timeout;
@@ -64,7 +66,7 @@ export class TerminalExecutor {
                           output.includes('command not found') ||
                           output.includes('Error:');
             
-            log(`Terminal command completed: ${command}`);
+            logger.info(`Terminal command completed: ${command}`);
             
             resolve({
               stdout: output,
@@ -82,14 +84,14 @@ export class TerminalExecutor {
         const output = this.outputBuffer.trim();
         
         if (output.length > 0) {
-          log(`Terminal command completed (timeout): ${command}`);
+          logger.info(`Terminal command completed (timeout): ${command}`);
           resolve({
             stdout: output,
             stderr: '',
             failed: false
           });
         } else {
-          logError(`Terminal command timeout: ${command}`);
+          logger.error(`Terminal command timeout: ${command}`);
           reject(new Error(`Command timeout after ${timeout}ms: ${command}`));
         }
       }, timeout);
@@ -106,7 +108,7 @@ export class TerminalExecutor {
       const startMarker = `__START_${Date.now()}__`;
       const endMarker = `__END_${Date.now()}__`;
       
-      log(`Executing terminal command with markers: ${command}`);
+      logger.info(`Executing terminal command with markers: ${command}`);
 
       const timeout = options?.timeout || 30000;
       let timeoutHandle: NodeJS.Timeout;
@@ -143,7 +145,7 @@ export class TerminalExecutor {
             
             cleanup();
             
-            log(`Terminal command completed with markers: ${command}`);
+            logger.info(`Terminal command completed with markers: ${command}`);
             
             resolve({
               stdout: capturedOutput,
@@ -158,7 +160,7 @@ export class TerminalExecutor {
 
       timeoutHandle = setTimeout(() => {
         cleanup();
-        logError(`Terminal command timeout: ${command}`);
+        logger.error(`Terminal command timeout: ${command}`);
         reject(new Error(`Command timeout after ${timeout}ms: ${command}`));
       }, timeout);
 

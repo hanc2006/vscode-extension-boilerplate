@@ -1,19 +1,20 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { writeEnvLocalFromK8sSecret, ServiceName, KUBE_NAMESPACES } from '../libs/kube';
-import { log, logError } from '../utils/logger';
+import { Logger } from '../utils/logger';
+import { getWorkspaceRoot, getServiceName } from '../utils/workspace';
+
+const logger = new Logger();
 
 export async function fetchEnvFromKube(uri?: vscode.Uri): Promise<void> {
   try {
-    log('Fetch Environment from Kube command triggered');
+    logger.info('Fetch Environment from Kube command triggered');
 
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (!workspaceFolders || workspaceFolders.length === 0) {
+    const workspaceRoot = getWorkspaceRoot();
+    if (!workspaceRoot) {
       vscode.window.showErrorMessage('No workspace folder is open.');
       return;
     }
-
-    const workspaceRoot = workspaceFolders[0].uri.fsPath;
 
     if (uri) {
       const targetPath = uri.fsPath;
@@ -25,21 +26,9 @@ export async function fetchEnvFromKube(uri?: vscode.Uri): Promise<void> {
       }
     }
 
-    const packageJsonUri = vscode.Uri.joinPath(workspaceFolders[0].uri, 'package.json');
-    let serviceName: string;
-
-    try {
-      const packageJsonContent = await vscode.workspace.fs.readFile(packageJsonUri);
-      const packageJson = JSON.parse(packageJsonContent.toString());
-      serviceName = packageJson.name;
-
-      if (!serviceName) {
-        vscode.window.showErrorMessage('package.json does not have a "name" property.');
-        return;
-      }
-    } catch (error: any) {
-      vscode.window.showErrorMessage(`Failed to read package.json: ${error.message}`);
-      logError('Failed to read package.json', error);
+    const serviceName = await getServiceName();
+    if (!serviceName) {
+      vscode.window.showErrorMessage('Failed to read package.json or package.json does not have a "name" property.');
       return;
     }
 
@@ -74,7 +63,7 @@ export async function fetchEnvFromKube(uri?: vscode.Uri): Promise<void> {
       );
 
       if (action !== 'Replace') {
-        log('User chose to skip overwriting existing file');
+        logger.info('User chose to skip overwriting existing file');
         return;
       }
     } catch (error) {
@@ -109,22 +98,22 @@ export async function fetchEnvFromKube(uri?: vscode.Uri): Promise<void> {
             }
           });
 
-          log(`Successfully created environment file: ${outputPath}`);
+          logger.info(`Successfully created environment file: ${outputPath}`);
         } catch (error: any) {
           vscode.window.showErrorMessage(
             `Failed to fetch environment: ${error.message}`,
             'View Logs'
           ).then(action => {
             if (action === 'View Logs') {
-              vscode.commands.executeCommand('workbench.action.output.show');
+              logger.showOutput();
             }
           });
-          logError('Failed to fetch environment from Kubernetes', error);
+          logger.error('Failed to fetch environment from Kubernetes', error);
         }
       }
     );
   } catch (error: any) {
     vscode.window.showErrorMessage(`Error: ${error.message}`);
-    logError('Error in fetchEnvFromKube command', error);
+    logger.error('Error in fetchEnvFromKube command', error);
   }
 }

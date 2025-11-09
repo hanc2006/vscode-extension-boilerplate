@@ -10,7 +10,9 @@
   "categories": [
     "Other"
   ],
-  "enabledApiProposals": ["terminalDataWriteEvent"],
+  "enabledApiProposals": [
+    "terminalDataWriteEvent"
+  ],
   "activationEvents": [
     "onStartupFinished"
   ],
@@ -104,18 +106,21 @@
     "lint": "eslint --fix src || exit 0",
     "test": "vscode-test",
     "download-api": "dts dev",
-		"postdownload-api": "dts main",
-		"postinstall": "npm run download-api"
+    "postdownload-api": "dts main",
+    "postinstall": "npm run download-api"
   },
   "devDependencies": {
-    "@vscode/dts": "^0.4.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
     "@typescript-eslint/eslint-plugin": "^8.28.0",
     "@typescript-eslint/parser": "^8.28.0",
-    "eslint": "^9.23.0",
-    "typescript": "^5.8.2",
+    "@vscode/dts": "^0.4.0",
     "@vscode/test-cli": "^0.0.10",
-    "@vscode/test-electron": "^2.4.1"
+    "@vscode/test-electron": "^2.4.1",
+    "eslint": "^9.23.0",
+    "typescript": "^5.8.2"
+  },
+  "dependencies": {
+    "lookpath": "^1.2.3"
   }
 }

@@ -1,15 +1,23 @@
 import * as vscode from 'vscode';
-import { executeCommand } from '../utils/exec';
-import { log, logError } from '../utils/logger';
+import { Logger } from '../utils/logger';
+import { Config } from '../utils/config';
+import { TerminalExecutor } from '../utils/terminal';
+
+const logger = new Logger();
 
 export class AwsProfileStatusBar {
   private statusBarItem: vscode.StatusBarItem;
   private currentProfile: string | undefined;
   private refreshInterval: NodeJS.Timeout | undefined;
   private context: vscode.ExtensionContext;
+  private config: Config;
+  private terminalExecutor: TerminalExecutor;
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
+    this.config = new Config();
+    this.terminalExecutor = new TerminalExecutor('aws-profile-manager');
+    
     this.statusBarItem = vscode.window.createStatusBarItem(
       vscode.StatusBarAlignment.Right,
       100
@@ -45,7 +53,9 @@ export class AwsProfileStatusBar {
 
   private async validateProfile(profile: string): Promise<boolean> {
     try {
-      const result = await executeCommand(`aws sts get-caller-identity --profile ${profile}`, { timeout: 5000 });
+      const result = await this.terminalExecutor.executeCommandWithMarkers(
+        `aws sts get-caller-identity --profile ${profile}`
+      );
       return !result.failed;
     } catch (error) {
       return false;
@@ -53,8 +63,7 @@ export class AwsProfileStatusBar {
   }
 
   private startAutoRefresh(): void {
-    const config = vscode.workspace.getConfiguration('awsKubeUtils');
-    const interval = config.get<number>('statusBarRefreshInterval', 60000);
+    const interval = this.config.getStatusBarRefreshInterval();
     
     if (this.refreshInterval) {
       clearInterval(this.refreshInterval);
@@ -68,18 +77,18 @@ export class AwsProfileStatusBar {
   async setProfile(profile: string): Promise<void> {
     this.currentProfile = profile;
     await this.context.globalState.update('awsCurrentProfile', profile);
-    log(`AWS profile set to: ${profile}`);
+    logger.info(`AWS profile set to: ${profile}`);
     await this.updateStatusBar();
   }
 
   async switchProfile(): Promise<void> {
     try {
-      log('Fetching AWS profiles...');
-      const result = await executeCommand('aws configure list-profiles');
+      logger.info('Fetching AWS profiles...');
+      const result = await this.terminalExecutor.executeCommandWithMarkers('aws configure list-profiles');
       
       if (result.failed || !result.stdout) {
         vscode.window.showErrorMessage('Failed to fetch AWS profiles. Make sure AWS CLI is installed and configured.');
-        logError('Failed to fetch AWS profiles', new Error(result.stderr));
+        logger.error('Failed to fetch AWS profiles', new Error(result.stderr));
         return;
       }
 
@@ -101,21 +110,21 @@ export class AwsProfileStatusBar {
       }
     } catch (error: any) {
       vscode.window.showErrorMessage(`Failed to switch AWS profile: ${error.message}`);
-      logError('Failed to switch AWS profile', error);
+      logger.error('Failed to switch AWS profile', error);
     }
   }
 
   private async loginToProfile(profile: string): Promise<void> {
-    const config = vscode.workspace.getConfiguration('awsKubeUtils');
-    const caBundlePath = config.get<string>('awsCaBundlePath', '');
+    const caBundlePath = this.config.getAwsCaBundlePath();
 
     let command = `aws sso login --profile ${profile}`;
     if (caBundlePath) {
       command += ` --ca-bundle "${caBundlePath}"`;
     }
 
-    log(`Executing AWS SSO login for profile: ${profile}`);
+    logger.info(`Executing AWS SSO login for profile: ${profile}`);
 
+    const loginTerminal = new TerminalExecutor(`AWS SSO Login - ${profile}`);
     const terminal = vscode.window.createTerminal({
       name: `AWS SSO Login - ${profile}`,
       hideFromUser: false
@@ -128,6 +137,7 @@ export class AwsProfileStatusBar {
   }
 
   async refresh(): Promise<void> {
+    this.config.refresh();
     await this.updateStatusBar();
   }
 
@@ -135,6 +145,7 @@ export class AwsProfileStatusBar {
     if (this.refreshInterval) {
       clearInterval(this.refreshInterval);
     }
+    this.terminalExecutor.dispose();
     this.statusBarItem.dispose();
   }
 }

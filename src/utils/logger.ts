@@ -1,37 +1,33 @@
 import * as vscode from 'vscode';
 
-let outputChannel: vscode.OutputChannel | null = null;
+export class Logger {
+  private outputChannel: vscode.OutputChannel;
 
-export function initLogger(): void {
-  outputChannel = vscode.window.createOutputChannel('AWS & Kube Utils');
-}
-
-export function log(message: string): void {
-  if (outputChannel) {
-    const timestamp = new Date().toISOString();
-    outputChannel.appendLine(`[${timestamp}] ${message}`);
+  constructor(channelName: string = 'AWS & Kube Utils') {
+    this.outputChannel = vscode.window.createOutputChannel(channelName);
   }
-}
 
-export function logError(message: string, error?: Error): void {
-  if (outputChannel) {
+  info(message: string): void {
     const timestamp = new Date().toISOString();
-    outputChannel.appendLine(`[${timestamp}] ERROR: ${message}`);
+    this.outputChannel.appendLine(`[${timestamp}] INFO: ${message}`);
+  }
+
+  error(message: string, error?: Error): void {
+    const timestamp = new Date().toISOString();
+    this.outputChannel.appendLine(`[${timestamp}] ERROR: ${message}`);
     if (error) {
-      outputChannel.appendLine(`[${timestamp}] ${error.message}`);
+      this.outputChannel.appendLine(`[${timestamp}] ${error.message}`);
       if (error.stack) {
-        outputChannel.appendLine(`[${timestamp}] ${error.stack}`);
+        this.outputChannel.appendLine(`[${timestamp}] ${error.stack}`);
       }
     }
   }
-}
 
-export function showOutput(): void {
-  if (outputChannel) {
-    outputChannel.show();
+  showOutput(): void {
+    this.outputChannel.show();
   }
-}
 
-export function getOutputChannel(): vscode.OutputChannel | null {
-  return outputChannel;
+  dispose(): void {
+    this.outputChannel.dispose();
+  }
 }
