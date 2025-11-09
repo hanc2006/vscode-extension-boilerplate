@@ -9,6 +9,7 @@
   "categories": [
     "Other"
   ],
+  "enabledApiProposals": [],
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
@@ -25,10 +26,13 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint --fix src || exit 0",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "download-api": "dts dev",
+		"postdownload-api": "dts main",
+		"postinstall": "npm run download-api"
   },
   "devDependencies": {
-    "@types/vscode": "^1.98.0",
+    "@vscode/dts": "^0.4.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
     "@typescript-eslint/eslint-plugin": "^8.28.0",
