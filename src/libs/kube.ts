@@ -1,12 +1,7 @@
-// Use the vscode.fs namespace to create/update/write a file content
-import fs from "fs-extra";
-import path from "path";
-
-// Use the VSCode Terminal API instead of import an external shell
-import { sh } from "./shell";
-
-// Can be removed. The env.OUTPUT_MIGRATION_PATH should be replaced with the workspace root path 
-import { env } from "../env";
+import * as vscode from 'vscode';
+import * as path from 'path';
+import { getKubectlExecutor } from '../utils/terminal';
+import { log, logError } from '../utils/logger';
 
 export const KUBE_NAMESPACES = {
   "yol-backend": [
@@ -100,35 +95,42 @@ export function resolveNamespaceForSecret(service: ServiceName): Namespace {
  * - Append env block from ConfigMap <serviceName>-cm-app-config if present
  * - Append prefixed values from global secret ns-global-secrets (same namespace) if present
  * - Rewrite internal service URLs to https://test.t.aws.flbs.ch/<service>
- * - Output path: /src/Common/Environment/.env.local.<secretName>
+ * - Output path: {workspaceRoot}/src/Common/Environment/.env.{environment}
  */
 export async function writeEnvLocalFromK8sSecret(
   serviceName: ServiceName,
-  environment: "test" | "integration" | "preprod" | "prod"
+  environment: "test" | "integration" | "preprod" | "prod",
+  workspaceRoot: string
 ): Promise<string> {
-  const run = sh(serviceName);
+  const executor = getKubectlExecutor();
   const secretName = `${serviceName}-secrets`;
   const namespace = resolveNamespaceForSecret(serviceName).concat(
     `-${environment}`
   );
 
-  // Resolve the destination path from the current workspace folder instead use env variable
+  const envFileName = environment === "test" ? ".env.local" : `.env.${environment}`;
+  
+  // Resolve the destination path from the workspace root
   const envOutPath = path.join(
-    env.OUTPUT_MIGRATION_PATH,
-    serviceName,
-    `src/Common/Environment/.env.${environment === "test" ? "local" : ""}`
+    workspaceRoot,
+    'src',
+    'Common',
+    'Environment',
+    envFileName
   );
 
   const PREFIX = serviceName.toUpperCase().replace(/-/g, "_") + "_";
 
+  log(`Fetching secret '${secretName}' from namespace '${namespace}'`);
+
   // 1) Fetch Secret JSON
-  const sec = await run({
-    reject: false,
-  })`kubectl get secret ${secretName} -n ${namespace} -o json`;
+  const sec = await executor.executeCommandWithMarkers(
+    `kubectl get secret ${secretName} -n ${namespace} -o json`
+  );
   if (sec.failed) {
-    throw new Error(
-      `Failed to fetch secret '${secretName}' from namespace '${namespace}'.`
-    );
+    const errorMsg = `Failed to fetch secret '${secretName}' from namespace '${namespace}'.`;
+    logError(errorMsg);
+    throw new Error(errorMsg);
   }
   const secJson = JSON.parse(sec.stdout || "{}");
   const secData: Record<string, string> = secJson?.data ?? {};
@@ -150,9 +152,10 @@ export async function writeEnvLocalFromK8sSecret(
   // 2) Append env block from ConfigMap <secretBaseName>-cm-app-config
   const cmName = `${serviceName}-cm-app-config`;
 
-  const cm = await run({
-    reject: false,
-  })`kubectl get configmap ${cmName} -n ${namespace} -o json`;
+  log(`Fetching configmap '${cmName}' from namespace '${namespace}'`);
+  const cm = await executor.executeCommandWithMarkers(
+    `kubectl get configmap ${cmName} -n ${namespace} -o json`
+  );
 
   if (!cm.failed) {
     try {
@@ -175,7 +178,7 @@ export async function writeEnvLocalFromK8sSecret(
           const block = (value ?? "").replace(/\r$/gm, "");
           // Append raw lines from the block
           for (const l of block.split("\n")) {
-            if (l.trim().length) lines.push(l);
+            if (l.trim().length) {lines.push(l);}
           }
         }
       }
@@ -187,9 +190,10 @@ export async function writeEnvLocalFromK8sSecret(
   // 3) Append global secret ns-global-secrets (same namespace) with PREFIX
   const globalSecretName = "ns-global-secrets";
 
-  const gs = await run({
-    reject: false,
-  })`kubectl get secret ${globalSecretName} -n ${namespace} -o json`;
+  log(`Fetching global secret '${globalSecretName}' from namespace '${namespace}'`);
+  const gs = await executor.executeCommandWithMarkers(
+    `kubectl get secret ${globalSecretName} -n ${namespace} -o json`
+  );
 
   if (!gs.failed) {
     try {
@@ -222,9 +226,20 @@ export async function writeEnvLocalFromK8sSecret(
     line.replace(urlPattern, (_m, svc) => `https://test.t.aws.flbs.ch/${svc}`)
   );
 
-  await fs.outputFile(envOutPath, rewritten.join("\n") + "\n", {
-    encoding: "utf8",
-  });
+  const content = rewritten.join("\n") + "\n";
+  const uri = vscode.Uri.file(envOutPath);
+  
+  try {
+    const dirUri = vscode.Uri.file(path.dirname(envOutPath));
+    await vscode.workspace.fs.createDirectory(dirUri);
+    
+    await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf8'));
+    log(`Successfully wrote environment file to: ${envOutPath}`);
+  } catch (error: any) {
+    const errorMsg = `Failed to write environment file to ${envOutPath}: ${error.message}`;
+    logError(errorMsg, error);
+    throw new Error(errorMsg);
+  }
 
   return envOutPath;
 }

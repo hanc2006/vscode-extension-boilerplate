@@ -1,22 +1,98 @@
 {
   "name": "vscode-extension-boilerplate",
-  "displayName": "vscode-extension-boilerplate",
-  "description": "vscode-extension-boilerplate",
+  "displayName": "AWS & Kubernetes Utilities",
+  "description": "VS Code extension for AWS and Kubernetes utilities",
   "version": "0.0.1",
+  "publisher": "microservitors",
   "engines": {
     "vscode": "^1.98.0"
   },
   "categories": [
     "Other"
   ],
-  "enabledApiProposals": [],
-  "activationEvents": [],
+  "enabledApiProposals": ["terminalDataWriteEvent"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "vscode-extension-boilerplate.helloWorld",
-        "title": "Hello World"
+        "command": "aws-kube-utils.fetchEnvFromKube",
+        "title": "Fetch Environment from Kube"
+      },
+      {
+        "command": "aws-kube-utils.switchAwsProfile",
+        "title": "Switch AWS Profile"
+      },
+      {
+        "command": "aws-kube-utils.openSetupWalkthrough",
+        "title": "AWS & Kube Utils: Open Setup Guide"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "aws-kube-utils.fetchEnvFromKube",
+          "when": "explorerResourceIsFolder && resourcePath =~ /src\\/Common\\/Environment$/",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "AWS & Kubernetes Utilities",
+      "properties": {
+        "awsKubeUtils.awsCaBundlePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the SSL certificate file for AWS SSO login (--ca-bundle parameter)"
+        },
+        "awsKubeUtils.statusBarRefreshInterval": {
+          "type": "number",
+          "default": 60000,
+          "description": "Interval in milliseconds to refresh the AWS profile status bar (default: 60000ms = 1 minute)"
+        }
+      }
+    },
+    "walkthroughs": [
+      {
+        "id": "awsKubeSetup",
+        "title": "AWS & Kubernetes Setup",
+        "description": "Setup guide for AWS CLI and kubectl prerequisites",
+        "steps": [
+          {
+            "id": "installAwsCli",
+            "title": "Install AWS CLI",
+            "description": "Install the AWS CLI v2 to use AWS features.\n[Install AWS CLI](https://aws.amazon.com/cli/)",
+            "media": {
+              "markdown": "walkthroughs/install-aws-cli.md"
+            }
+          },
+          {
+            "id": "installKubectl",
+            "title": "Install kubectl",
+            "description": "Install kubectl to use Kubernetes features.\n[Install kubectl](https://kubernetes.io/docs/tasks/tools/)",
+            "media": {
+              "markdown": "walkthroughs/install-kubectl.md"
+            }
+          },
+          {
+            "id": "configureSettings",
+            "title": "Configure Extension Settings",
+            "description": "Configure the SSL certificate path for AWS SSO login.\n[Open Settings](command:workbench.action.openSettings?%5B%22awsKubeUtils%22%5D)",
+            "media": {
+              "markdown": "walkthroughs/configure-settings.md"
+            }
+          },
+          {
+            "id": "verifyPackageJson",
+            "title": "Verify package.json",
+            "description": "Ensure your workspace has a package.json with a 'name' property at the root.",
+            "media": {
+              "markdown": "walkthroughs/verify-package-json.md"
+            }
+          }
+        ]
       }
     ]
   },
