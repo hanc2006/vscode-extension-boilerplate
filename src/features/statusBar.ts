@@ -63,7 +63,7 @@ export class AwsProfileStatusBar {
   }
 
   private startAutoRefresh(): void {
-    const interval = this.config.getStatusBarRefreshInterval();
+    const interval = this.config.read().statusBarRefreshInterval;
     
     if (this.refreshInterval) {
       clearInterval(this.refreshInterval);
@@ -115,7 +115,7 @@ export class AwsProfileStatusBar {
   }
 
   private async loginToProfile(profile: string): Promise<void> {
-    const caBundlePath = this.config.getAwsCaBundlePath();
+    const caBundlePath = this.config.read().awsCaBundlePath;
 
     let command = `aws sso login --profile ${profile}`;
     if (caBundlePath) {
