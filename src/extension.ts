@@ -41,7 +41,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const fetchEnvCmd = vscode.commands.registerCommand(
     'aws-kube-utils.fetchEnvFromKube',
     async (uri?: vscode.Uri) => {
-      await fetchEnvFromKube(uri);
+      await fetchEnvFromKube(prerequisites, uri);
     }
   );
   context.subscriptions.push(fetchEnvCmd);

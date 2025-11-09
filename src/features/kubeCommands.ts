@@ -1,34 +1,19 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { writeEnvLocalFromK8sSecret, ServiceName, KUBE_NAMESPACES } from '../libs/kube';
+import { writeEnvLocalFromK8sSecret, ServiceName, KUBE_NAMESPACES, environments, Environment } from '../libs/kube';
 import { Logger } from '../utils/logger';
-import { getWorkspaceRoot, getServiceName } from '../utils/workspace';
+import { PrerequisiteCheckResult } from '../utils/prerequisites';
 
 const logger = new Logger();
 
-export async function fetchEnvFromKube(uri?: vscode.Uri): Promise<void> {
+export async function fetchEnvFromKube(prerequisites: PrerequisiteCheckResult, uri?: vscode.Uri): Promise<void> {
   try {
     logger.info('Fetch Environment from Kube command triggered');
 
-    const workspaceRoot = getWorkspaceRoot();
-    if (!workspaceRoot) {
-      vscode.window.showErrorMessage('No workspace folder is open.');
-      return;
-    }
+    const { workspaceRoot, serviceName } = prerequisites;
 
-    if (uri) {
-      const targetPath = uri.fsPath;
-      const expectedPath = path.join(workspaceRoot, 'src', 'Common', 'Environment');
-      
-      if (!targetPath.endsWith(path.join('src', 'Common', 'Environment'))) {
-        vscode.window.showWarningMessage('This command should be run on the src/Common/Environment folder.');
-        return;
-      }
-    }
-
-    const serviceName = await getServiceName();
-    if (!serviceName) {
-      vscode.window.showErrorMessage('Failed to read package.json or package.json does not have a "name" property.');
+    if (!workspaceRoot || !serviceName) {
+      vscode.window.showErrorMessage('Prerequisites not satisfied. Please ensure workspace and package.json are valid.');
       return;
     }
 
@@ -38,8 +23,7 @@ export async function fetchEnvFromKube(uri?: vscode.Uri): Promise<void> {
       return;
     }
 
-    const environments: Array<'test' | 'integration' | 'preprod' | 'prod'> = ['test', 'integration', 'preprod', 'prod'];
-    const selectedEnv = await vscode.window.showQuickPick(environments, {
+    const selectedEnv = await vscode.window.showQuickPick([...environments], {
       placeHolder: 'Select an environment',
       title: 'Fetch Environment from Kubernetes'
     });
@@ -81,7 +65,7 @@ export async function fetchEnvFromKube(uri?: vscode.Uri): Promise<void> {
           
           const outputPath = await writeEnvLocalFromK8sSecret(
             serviceName as ServiceName,
-            selectedEnv as 'test' | 'integration' | 'preprod' | 'prod',
+            selectedEnv as Environment,
             workspaceRoot
           );
 
