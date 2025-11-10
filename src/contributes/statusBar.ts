@@ -8,11 +8,12 @@ import path from "path";
 export class AwsProfileStatusBar {
   private statusBarItem: vscode.StatusBarItem;
   private currentProfile: string | undefined;
-  private refreshInterval: NodeJS.Timeout | undefined;
-  private vpnInterval: NodeJS.Timeout | undefined;
+  private schedulerAbort?: AbortController;
   private context: vscode.ExtensionContext;
   private lastVpnOk: boolean = false;
   private isVpnChecking: boolean = false;
+  private lastVpnCheckAt: number = 0;
+  private lastRefreshAt: number = 0;
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
@@ -26,8 +27,7 @@ export class AwsProfileStatusBar {
 
     this.currentProfile = context.globalState.get<string>("awsCurrentProfile");
 
-    this.startVpnWatcher();
-    this.startAutoRefresh();
+    void this.startScheduler();
   }
 
   private async updateStatusBar(): Promise<void> {
@@ -107,23 +107,6 @@ export class AwsProfileStatusBar {
       logger.info(`VPN connection state changed: ${this.lastVpnOk ? "connected" : "disconnected"}`);
       await this.updateStatusBar();
     }
-  }
-
-  private startVpnWatcher(): void {
-    const vpnIntervalMs = Math.min(
-      30000,
-      config.read("statusBarRefreshInterval")
-    );
-
-    void this.checkVpnNow();
-
-    if (this.vpnInterval) {
-      clearInterval(this.vpnInterval);
-    }
-
-    this.vpnInterval = setInterval(() => {
-      void this.checkVpnNow();
-    }, vpnIntervalMs);
   }
 
   private async startScheduler(): Promise<void> {
@@ -253,10 +236,6 @@ export class AwsProfileStatusBar {
 
   dispose(): void {
     this.schedulerAbort?.abort();
-
-    if (this.vpnInterval) {
-      clearInterval(this.vpnInterval);
-    }
 
     terminal.dispose();
     this.statusBarItem.dispose();
