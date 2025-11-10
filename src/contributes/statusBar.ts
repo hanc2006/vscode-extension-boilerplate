@@ -8,7 +8,10 @@ export class AwsProfileStatusBar {
   private statusBarItem: vscode.StatusBarItem;
   private currentProfile: string | undefined;
   private refreshInterval: NodeJS.Timeout | undefined;
+  private vpnInterval: NodeJS.Timeout | undefined;
   private context: vscode.ExtensionContext;
+  private lastVpnOk: boolean = false;
+  private isVpnChecking: boolean = false;
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
@@ -22,11 +25,22 @@ export class AwsProfileStatusBar {
 
     this.currentProfile = context.globalState.get<string>("awsCurrentProfile");
 
-    this.updateStatusBar();
+    this.startVpnWatcher();
     this.startAutoRefresh();
   }
 
   private async updateStatusBar(): Promise<void> {
+    if (!this.lastVpnOk) {
+      this.statusBarItem.text = "$(cloud) AWS: No VPN Connection";
+      this.statusBarItem.backgroundColor = new vscode.ThemeColor(
+        "statusBarItem.warningBackground"
+      );
+      this.statusBarItem.tooltip =
+        "No VPN connection detected. Connect VPN to validate AWS profile.";
+      this.statusBarItem.show();
+      return;
+    }
+
     if (this.currentProfile) {
       const isValid = await this.validateProfile(this.currentProfile);
       if (isValid) {
@@ -66,6 +80,51 @@ export class AwsProfileStatusBar {
     }
   }
 
+  private async checkVpnNow(): Promise<void> {
+    if (this.isVpnChecking) {
+      return;
+    }
+
+    this.isVpnChecking = true;
+    const previousState = this.lastVpnOk;
+
+    try {
+      await terminal.executeCommand("curl", [
+        "-sSf",
+        "--max-time",
+        "2",
+        "https://oidc.eu-west-1.amazonaws.com",
+      ]);
+      this.lastVpnOk = true;
+    } catch (error) {
+      this.lastVpnOk = false;
+    } finally {
+      this.isVpnChecking = false;
+    }
+
+    if (previousState !== this.lastVpnOk) {
+      logger.info(`VPN connection state changed: ${this.lastVpnOk ? "connected" : "disconnected"}`);
+      await this.updateStatusBar();
+    }
+  }
+
+  private startVpnWatcher(): void {
+    const vpnIntervalMs = Math.min(
+      30000,
+      config.read("statusBarRefreshInterval")
+    );
+
+    void this.checkVpnNow();
+
+    if (this.vpnInterval) {
+      clearInterval(this.vpnInterval);
+    }
+
+    this.vpnInterval = setInterval(() => {
+      void this.checkVpnNow();
+    }, vpnIntervalMs);
+  }
+
   private startAutoRefresh(): void {
     const interval = config.read("statusBarRefreshInterval");
 
@@ -87,6 +146,15 @@ export class AwsProfileStatusBar {
 
   async switchProfile(): Promise<void> {
     try {
+      await this.checkVpnNow();
+      if (!this.lastVpnOk) {
+        vscode.window.showErrorMessage(
+          "No VPN connection detected. Connect VPN and try again."
+        );
+        logger.error("Failed to switch AWS profile: No VPN connection");
+        return;
+      }
+
       logger.info("Fetching AWS profiles...");
       const result = await terminal.executeCommand("aws", [
         "configure",
@@ -161,6 +229,10 @@ export class AwsProfileStatusBar {
   dispose(): void {
     if (this.refreshInterval) {
       clearInterval(this.refreshInterval);
+    }
+
+    if (this.vpnInterval) {
+      clearInterval(this.vpnInterval);
     }
 
     terminal.dispose();
