@@ -8,9 +8,10 @@ export class AwsProfileStatusBar {
   private statusBarItem: vscode.StatusBarItem;
   private currentProfile: string | undefined;
   private refreshInterval: NodeJS.Timeout | undefined;
+  private vpnInterval: NodeJS.Timeout | undefined;
   private context: vscode.ExtensionContext;
-  private lastVpnCheckAt?: number;
-  private lastVpnOk?: boolean;
+  private lastVpnOk: boolean = false;
+  private isVpnChecking: boolean = false;
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
@@ -24,13 +25,12 @@ export class AwsProfileStatusBar {
 
     this.currentProfile = context.globalState.get<string>("awsCurrentProfile");
 
-    this.updateStatusBar();
+    this.startVpnWatcher();
     this.startAutoRefresh();
   }
 
   private async updateStatusBar(): Promise<void> {
-    const vpnConnected = await this.isVpnConnected();
-    if (!vpnConnected) {
+    if (!this.lastVpnOk) {
       this.statusBarItem.text = "$(cloud) AWS: No VPN Connection";
       this.statusBarItem.backgroundColor = new vscode.ThemeColor(
         "statusBarItem.warningBackground"
@@ -80,20 +80,13 @@ export class AwsProfileStatusBar {
     }
   }
 
-  private async isVpnConnected(force = false): Promise<boolean> {
-    const vpnTtlMs = Math.min(
-      30000,
-      config.read("statusBarRefreshInterval")
-    );
-
-    if (
-      !force &&
-      this.lastVpnCheckAt !== undefined &&
-      this.lastVpnOk !== undefined &&
-      Date.now() - this.lastVpnCheckAt < vpnTtlMs
-    ) {
-      return this.lastVpnOk;
+  private async checkVpnNow(): Promise<void> {
+    if (this.isVpnChecking) {
+      return;
     }
+
+    this.isVpnChecking = true;
+    const previousState = this.lastVpnOk;
 
     try {
       await terminal.executeCommand("curl", [
@@ -103,15 +96,33 @@ export class AwsProfileStatusBar {
         "https://oidc.eu-west-1.amazonaws.com",
       ]);
       this.lastVpnOk = true;
-      this.lastVpnCheckAt = Date.now();
-      logger.info("VPN connection check: connected");
-      return true;
     } catch (error) {
       this.lastVpnOk = false;
-      this.lastVpnCheckAt = Date.now();
-      logger.info("VPN connection check: not connected");
-      return false;
+    } finally {
+      this.isVpnChecking = false;
     }
+
+    if (previousState !== this.lastVpnOk) {
+      logger.info(`VPN connection state changed: ${this.lastVpnOk ? "connected" : "disconnected"}`);
+      await this.updateStatusBar();
+    }
+  }
+
+  private startVpnWatcher(): void {
+    const vpnIntervalMs = Math.min(
+      30000,
+      config.read("statusBarRefreshInterval")
+    );
+
+    void this.checkVpnNow();
+
+    if (this.vpnInterval) {
+      clearInterval(this.vpnInterval);
+    }
+
+    this.vpnInterval = setInterval(() => {
+      void this.checkVpnNow();
+    }, vpnIntervalMs);
   }
 
   private startAutoRefresh(): void {
@@ -135,8 +146,8 @@ export class AwsProfileStatusBar {
 
   async switchProfile(): Promise<void> {
     try {
-      const vpnConnected = await this.isVpnConnected();
-      if (!vpnConnected) {
+      await this.checkVpnNow();
+      if (!this.lastVpnOk) {
         vscode.window.showErrorMessage(
           "No VPN connection detected. Connect VPN and try again."
         );
@@ -218,6 +229,10 @@ export class AwsProfileStatusBar {
   dispose(): void {
     if (this.refreshInterval) {
       clearInterval(this.refreshInterval);
+    }
+
+    if (this.vpnInterval) {
+      clearInterval(this.vpnInterval);
     }
 
     terminal.dispose();
