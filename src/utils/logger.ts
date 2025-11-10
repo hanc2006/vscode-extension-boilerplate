@@ -1,9 +1,9 @@
-import * as vscode from 'vscode';
+import * as vscode from "vscode";
 
 export class Logger {
   private outputChannel: vscode.OutputChannel;
 
-  constructor(channelName: string = 'AWS & Kube Utils') {
+  constructor(channelName: string = "AWS & Kube Utils") {
     this.outputChannel = vscode.window.createOutputChannel(channelName);
   }
 
@@ -31,3 +31,5 @@ export class Logger {
     this.outputChannel.dispose();
   }
 }
+
+export const logger = new Logger();

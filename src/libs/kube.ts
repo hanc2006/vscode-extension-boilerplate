@@ -1,13 +1,10 @@
-import * as vscode from 'vscode';
-import * as path from 'path';
-import { getKubectlExecutor } from '../utils/terminal';
-import { Logger } from '../utils/logger';
-import { writeFile } from '../utils/workspace';
+import * as path from "path";
+import { terminal } from "../utils/terminal";
+import { logger } from "../utils/logger";
+import { writeFile } from "../utils/workspace";
 
-const logger = new Logger();
-
-export const environments = ['test', 'integration', 'preprod', 'prod'] as const;
-export type Environment = typeof environments[number];
+export const environments = ["test", "integration", "preprod", "prod"] as const;
+export type Environment = (typeof environments)[number];
 
 export const KUBE_NAMESPACES = {
   "yol-backend": [
@@ -108,20 +105,20 @@ export async function writeEnvLocalFromK8sSecret(
   environment: Environment,
   workspaceRoot: string
 ): Promise<string> {
-  const executor = getKubectlExecutor();
   const secretName = `${serviceName}-secrets`;
   const namespace = resolveNamespaceForSecret(serviceName).concat(
     `-${environment}`
   );
 
-  const envFileName = environment === "test" ? ".env.local" : `.env.${environment}`;
-  
+  const envFileName =
+    environment === "test" ? ".env.local" : `.env.${environment}`;
+
   // Resolve the destination path from the workspace root
   const envOutPath = path.join(
     workspaceRoot,
-    'src',
-    'Common',
-    'Environment',
+    "src",
+    "Common",
+    "Environment",
     envFileName
   );
 
@@ -130,15 +127,21 @@ export async function writeEnvLocalFromK8sSecret(
   logger.info(`Fetching secret '${secretName}' from namespace '${namespace}'`);
 
   // 1) Fetch Secret JSON
-  const sec = await executor.executeCommandWithMarkers(
-    `kubectl get secret ${secretName} -n ${namespace} -o json`
-  );
+  const sec = await terminal.executeCommand("kubectl", [
+    "get",
+    "secret",
+    secretName,
+    "-n",
+    namespace,
+    "-o",
+    "json",
+  ]);
   if (sec.failed) {
     const errorMsg = `Failed to fetch secret '${secretName}' from namespace '${namespace}'.`;
     logger.error(errorMsg);
     throw new Error(errorMsg);
   }
-  const secJson = JSON.parse(sec.stdout || "{}");
+  const secJson = JSON.parse(sec.stdout.join("\n"));
   const secData: Record<string, string> = secJson?.data ?? {};
 
   const lines: string[] = [];
@@ -159,13 +162,19 @@ export async function writeEnvLocalFromK8sSecret(
   const cmName = `${serviceName}-cm-app-config`;
 
   logger.info(`Fetching configmap '${cmName}' from namespace '${namespace}'`);
-  const cm = await executor.executeCommandWithMarkers(
-    `kubectl get configmap ${cmName} -n ${namespace} -o json`
-  );
+  const cm = await terminal.executeCommand("kubectl", [
+    "get",
+    "configmap",
+    cmName,
+    "-n",
+    namespace,
+    "-o",
+    "json",
+  ]);
 
   if (!cm.failed) {
     try {
-      const cmJson = JSON.parse(cm.stdout || "{}");
+      const cmJson = JSON.parse(cm.stdout.join("\n"));
       const cmData: Record<string, string> = cmJson?.data ?? {};
       const envLikeEntries = Object.entries(cmData).filter(([key, value]) => {
         const keyIsEnv = /(^|\.)env(\.|-|$)/i.test(key);
@@ -184,7 +193,9 @@ export async function writeEnvLocalFromK8sSecret(
           const block = (value ?? "").replace(/\r$/gm, "");
           // Append raw lines from the block
           for (const l of block.split("\n")) {
-            if (l.trim().length) {lines.push(l);}
+            if (l.trim().length) {
+              lines.push(l);
+            }
           }
         }
       }
@@ -196,14 +207,22 @@ export async function writeEnvLocalFromK8sSecret(
   // 3) Append global secret ns-global-secrets (same namespace) with PREFIX
   const globalSecretName = "ns-global-secrets";
 
-  logger.info(`Fetching global secret '${globalSecretName}' from namespace '${namespace}'`);
-  const gs = await executor.executeCommandWithMarkers(
-    `kubectl get secret ${globalSecretName} -n ${namespace} -o json`
+  logger.info(
+    `Fetching global secret '${globalSecretName}' from namespace '${namespace}'`
   );
+  const gs = await terminal.executeCommand("kubectl", [
+    "get",
+    "secret",
+    globalSecretName,
+    "-n",
+    namespace,
+    "-o",
+    "json",
+  ]);
 
   if (!gs.failed) {
     try {
-      const gsJson = JSON.parse(gs.stdout || "{}");
+      const gsJson = JSON.parse(gs.stdout.join("\n"));
       const gsData: Record<string, string> = gsJson?.data ?? {};
       lines.push(
         "",
@@ -233,7 +252,7 @@ export async function writeEnvLocalFromK8sSecret(
   );
 
   const content = rewritten.join("\n") + "\n";
-  
+
   try {
     await writeFile(envOutPath, content);
     logger.info(`Successfully wrote environment file to: ${envOutPath}`);

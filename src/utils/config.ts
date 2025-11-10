@@ -1,6 +1,6 @@
-import * as vscode from 'vscode';
+import * as vscode from "vscode";
 
-const CONFIG_SECTION = 'awsKubeUtils';
+const CONFIG_SECTION = "awsKubeUtils";
 
 export interface ExtensionConfig {
   awsCaBundlePath: string;
@@ -8,8 +8,8 @@ export interface ExtensionConfig {
 }
 
 const DEFAULT_CONFIG: ExtensionConfig = {
-  awsCaBundlePath: '',
-  statusBarRefreshInterval: 60000
+  awsCaBundlePath: "data/portal.sso.eu-west-1.amazonaws.com.pem",
+  statusBarRefreshInterval: 60000,
 };
 
 export class Config {
@@ -19,27 +19,22 @@ export class Config {
     this.config = vscode.workspace.getConfiguration(CONFIG_SECTION);
   }
 
-  refresh(): void {
+  private load() {
     this.config = vscode.workspace.getConfiguration(CONFIG_SECTION);
   }
 
-  read(): ExtensionConfig {
-    return {
-      awsCaBundlePath: this.config.get<string>('awsCaBundlePath', DEFAULT_CONFIG.awsCaBundlePath),
-      statusBarRefreshInterval: this.config.get<number>('statusBarRefreshInterval', DEFAULT_CONFIG.statusBarRefreshInterval)
-    };
-  }
-
-  async write<K extends keyof ExtensionConfig>(
+  public async write<K extends keyof ExtensionConfig>(
     name: K,
     value: ExtensionConfig[K],
     target: vscode.ConfigurationTarget = vscode.ConfigurationTarget.Global
   ): Promise<void> {
     await this.config.update(name, value, target);
-    this.refresh();
+    this.load();
   }
 
-  value<K extends keyof ExtensionConfig>(name: K): ExtensionConfig[K] {
-    return this.read()[name];
+  public read<K extends keyof ExtensionConfig>(name: K): ExtensionConfig[K] {
+    return this.config.get<ExtensionConfig[K]>(name, DEFAULT_CONFIG[name]);
   }
 }
+
+export const config = new Config();
