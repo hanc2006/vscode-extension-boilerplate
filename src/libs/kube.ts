@@ -105,7 +105,7 @@ export function resolveNamespaceForSecret(service: ServiceName): Namespace {
  */
 export async function writeEnvLocalFromK8sSecret(
   serviceName: ServiceName,
-  environment: "test" | "integration" | "preprod" | "prod",
+  environment: Environment,
   workspaceRoot: string
 ): Promise<string> {
   const executor = getKubectlExecutor();
@@ -233,13 +233,9 @@ export async function writeEnvLocalFromK8sSecret(
   );
 
   const content = rewritten.join("\n") + "\n";
-  const uri = vscode.Uri.file(envOutPath);
   
   try {
-    const dirUri = vscode.Uri.file(path.dirname(envOutPath));
-    await vscode.workspace.fs.createDirectory(dirUri);
-    
-    await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf8'));
+    await writeFile(envOutPath, content);
     logger.info(`Successfully wrote environment file to: ${envOutPath}`);
   } catch (error: any) {
     const errorMsg = `Failed to write environment file to ${envOutPath}: ${error.message}`;
