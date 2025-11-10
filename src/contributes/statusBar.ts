@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { setInterval } from "node:timers/promises";
 import { logger } from "../utils/logger";
 import { config } from "../utils/config";
 import { terminal } from "../utils/terminal";
@@ -125,16 +126,40 @@ export class AwsProfileStatusBar {
     }, vpnIntervalMs);
   }
 
-  private startAutoRefresh(): void {
-    const interval = config.read("statusBarRefreshInterval");
+  private async startScheduler(): Promise<void> {
+    const refreshMs = config.read("statusBarRefreshInterval");
+    const vpnMs = Math.min(30000, refreshMs);
+    const tickMs = Math.min(vpnMs, refreshMs);
 
-    if (this.refreshInterval) {
-      clearInterval(this.refreshInterval);
+    this.schedulerAbort?.abort();
+    this.schedulerAbort = new AbortController();
+    const { signal } = this.schedulerAbort;
+
+    await this.checkVpnNow();
+    await this.updateStatusBar();
+    this.lastVpnCheckAt = Date.now();
+    this.lastRefreshAt = Date.now();
+
+    try {
+      for await (const _ of setInterval(tickMs, undefined, {
+        signal,
+        ref: false,
+      })) {
+        const now = Date.now();
+        if (now - this.lastVpnCheckAt >= vpnMs) {
+          await this.checkVpnNow();
+          this.lastVpnCheckAt = now;
+        }
+        if (now - this.lastRefreshAt >= refreshMs) {
+          await this.updateStatusBar();
+          this.lastRefreshAt = now;
+        }
+      }
+    } catch (error: any) {
+      if (error.name !== "AbortError") {
+        logger.error("Scheduler error", error);
+      }
     }
-
-    this.refreshInterval = setInterval(() => {
-      this.updateStatusBar();
-    }, interval);
   }
 
   async setProfile(profile: string): Promise<void> {
@@ -227,9 +252,7 @@ export class AwsProfileStatusBar {
   }
 
   dispose(): void {
-    if (this.refreshInterval) {
-      clearInterval(this.refreshInterval);
-    }
+    this.schedulerAbort?.abort();
 
     if (this.vpnInterval) {
       clearInterval(this.vpnInterval);
